@@ -1,0 +1,321 @@
+// =============================================================================
+// SNABB FOOD DELIVERY PLATFORM - PRISMA SCHEMA
+// Database Provider: PostgreSQL
+// =============================================================================
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// -----------------------------------------------------------------------------
+// ENUMS
+// -----------------------------------------------------------------------------
+
+enum UserRole {
+  CUSTOMER
+  RESTAURANT_OWNER
+  DELIVERY_DRIVER
+  ADMIN
+}
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  PREPARING
+  READY_FOR_PICKUP
+  OUT_FOR_DELIVERY
+  DELIVERED
+  CANCELLED
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+}
+
+// -----------------------------------------------------------------------------
+// USER & PROFILE
+// -----------------------------------------------------------------------------
+
+model User {
+  id              String            @id @default(uuid())
+  name            String
+  email           String?           @unique
+  phoneNumber     String?           @unique
+  passwordHash    String?
+  clearanceKey    String?
+  twoFactorSecret String?
+  role            UserRole          @default(CUSTOMER)
+  avatarUrl       String?
+  
+  // Relationships
+  addresses       DeliveryAddress[]
+  restaurants     Restaurant[]      @relation("RestaurantOwner")
+  orders          Order[]           @relation("CustomerOrders")
+  driverOrders    Order[]           @relation("DriverDeliveries")
+  cart            Cart?
+  reviews         Review[]
+  favorites       Favorite[]
+
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  @@index([role])
+  @@index([phoneNumber])
+  @@index([email])
+}
+
+// -----------------------------------------------------------------------------
+// DELIVERY ADDRESSES
+// -----------------------------------------------------------------------------
+
+model DeliveryAddress {
+  id         String   @id @default(uuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  label      String   @default("Home") // Home, Office, Other
+  street     String
+  city       String   @default("Addis Ababa")
+  doorCode   String?
+  latitude   Float?
+  longitude  Float?
+  isDefault  Boolean  @default(false)
+
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([userId])
+}
+
+// -----------------------------------------------------------------------------
+// RESTAURANT & MENU
+// -----------------------------------------------------------------------------
+
+model Restaurant {
+  id                String         @id @default(uuid())
+  ownerId           String
+  owner             User           @relation("RestaurantOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  name              String
+  slug              String         @unique
+  description       String?
+  address           String
+  city              String         @default("Addis Ababa")
+  cuisine           String[]       // e.g. ["Traditional Ethiopian", "Tibs", "Shiro"]
+  rating            Float          @default(4.9)
+  reviewCount       Int            @default(0)
+  deliveryTimeMin   Int            @default(20)
+  deliveryFee       Float          @default(65.0) // In ETB
+  minOrder          Float          @default(100.0) // In ETB
+  bannerImage       String
+  logoImage         String
+  isOpen            Boolean        @default(true)
+  isAcceptingOrders Boolean        @default(true)
+  prepTimeDefault   Int            @default(15) // Minutes
+  tags              String[]       // ["fast", "freedel", "toprated", "habesha", "halal", "vegan"]
+  latitude          Float?
+  longitude         Float?
+
+  // Relationships
+  categories        FoodCategory[]
+  menuItems         MenuItem[]
+  orders            Order[]
+  reviews           Review[]
+  favorites         Favorite[]
+
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  @@index([ownerId])
+  @@index([slug])
+}
+
+model FoodCategory {
+  id           String     @id @default(uuid())
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  name         String
+  slug         String
+  icon         String?    // e.g. "🍲", "🍔", "🍕"
+  sortOrder    Int        @default(0)
+
+  // Relationships
+  menuItems    MenuItem[]
+
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@index([restaurantId])
+}
+
+model MenuItem {
+  id           String        @id @default(uuid())
+  restaurantId String
+  restaurant   Restaurant    @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  categoryId   String?
+  category     FoodCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  name         String
+  description  String
+  price        Float         // In ETB (e.g. 420 ETB)
+  image        String?
+  isAvailable  Boolean       @default(true)
+  isPopular    Boolean       @default(false)
+
+  // Relationships
+  cartItems    CartItem[]
+  orderItems   OrderItem[]
+
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  @@index([restaurantId])
+  @@index([categoryId])
+}
+
+// -----------------------------------------------------------------------------
+// CART & CART ITEMS
+// -----------------------------------------------------------------------------
+
+model Cart {
+  id        String     @id @default(uuid())
+  userId    String     @unique
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  items     CartItem[]
+
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+}
+
+model CartItem {
+  id         String   @id @default(uuid())
+  cartId     String
+  cart       Cart     @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  menuItemId String
+  menuItem   MenuItem @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
+  quantity   Int      @default(1)
+  price      Float    // Price snapshot at time of adding
+
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([cartId])
+  @@index([menuItemId])
+}
+
+// -----------------------------------------------------------------------------
+// ORDERS & ORDER ITEMS
+// -----------------------------------------------------------------------------
+
+model Order {
+  id              String        @id @default(uuid())
+  orderNumber     String        @unique // e.g. "SNB-9281"
+  userId          String
+  customer        User          @relation("CustomerOrders", fields: [userId], references: [id], onDelete: Restrict)
+  restaurantId    String
+  restaurant      Restaurant    @relation(fields: [restaurantId], references: [id], onDelete: Restrict)
+  driverId        String?
+  driver          User?         @relation("DriverDeliveries", fields: [driverId], references: [id], onDelete: SetNull)
+
+  status          OrderStatus   @default(PENDING)
+  subtotal        Float         // ETB
+  deliveryFee     Float         // ETB
+  serviceFee      Float         // ETB
+  tip             Float         @default(0.0) // ETB
+  total           Float         // ETB
+  
+  deliveryAddress String        // e.g. "Bole Medhanialem, Atlas Apt 3B"
+  dropOffNote     String?
+  paymentMethod   String        @default("Telebirr") // Telebirr, CBE Birr, Chapa, Cash
+  paymentStatus   PaymentStatus @default(PENDING)
+
+  // Relationships
+  items           OrderItem[]
+  payments        Payment[]
+
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([userId])
+  @@index([restaurantId])
+  @@index([driverId])
+  @@index([status])
+}
+
+model OrderItem {
+  id         String   @id @default(uuid())
+  orderId    String
+  order      Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  menuItemId String
+  menuItem   MenuItem @relation(fields: [menuItemId], references: [id], onDelete: Restrict)
+  name       String   // Snapshot of dish name
+  quantity   Int      @default(1)
+  price      Float    // Price snapshot in ETB
+  subtotal   Float    // quantity * price
+
+  @@index([orderId])
+  @@index([menuItemId])
+}
+
+// -----------------------------------------------------------------------------
+// PAYMENTS
+// -----------------------------------------------------------------------------
+
+model Payment {
+  id             String        @id @default(uuid())
+  orderId        String
+  order          Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  amount         Float         // ETB
+  method         String        // Telebirr, CBE Birr, Chapa, Cash
+  status         PaymentStatus @default(PENDING)
+  transactionRef String?       // e.g. "TLB-2026-98124"
+
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@index([orderId])
+}
+
+// -----------------------------------------------------------------------------
+// REVIEWS & RATINGS
+// -----------------------------------------------------------------------------
+
+model Review {
+  id            String     @id @default(uuid())
+  userId        String
+  user          User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  restaurantId  String
+  restaurant    Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  rating        Int        @default(5) // 1 to 5
+  comment       String
+  merchantReply String?
+
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  @@index([userId])
+  @@index([restaurantId])
+}
+
+// -----------------------------------------------------------------------------
+// FAVORITES / BOOKMARKS
+// -----------------------------------------------------------------------------
+
+model Favorite {
+  id           String     @id @default(uuid())
+  userId       String
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  createdAt    DateTime   @default(now())
+
+  @@unique([userId, restaurantId])
+  @@index([userId])
+}

@@ -1,12 +1,19 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { InMemoryDbService } from '../../database/in-memory-db.service.js';
+import { PrismaService } from '../../database/prisma.service.js';
 import { OrderEntity } from '../../database/entities.js';
 import { OrderStatus } from '../../common/enums/order-status.enum.js';
 import { CreateOrderDto } from './dto/create-order.dto.js';
 
 @Injectable()
 export class OrdersService {
-  constructor(private db: InMemoryDbService) {}
+  private readonly logger = new Logger(OrdersService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly db: InMemoryDbService,
+  ) {}
+
 
   createOrder(dto: CreateOrderDto, customer: { id: string; name: string; phoneNumber?: string }): OrderEntity {
     const restaurant = this.db.getRestaurantById(dto.restaurantId);
