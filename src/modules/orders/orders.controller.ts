@@ -24,6 +24,8 @@ export class OrdersController {
   }
 
   @Get('kanban')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.RESTAURANT)
   @ApiOperation({ summary: 'Get live Kanban board categorizing orders for Admin and Restaurant queues' })
   getKanban() {
     return this.ordersService.getKanban();

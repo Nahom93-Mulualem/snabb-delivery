@@ -37,12 +37,12 @@ export class CouriersService {
       orderId: o.id,
       orderNumber: o.orderNumber,
       restaurantName: o.restaurantName,
-      pickupAddress: 'Kungsgatan 22, Stockholm',
+      pickupAddress: 'Bole Road, Addis Ababa',
       deliveryAddress: o.deliveryAddress,
-      distanceKm: 1.2,
-      estimatedMinutes: 14,
-      payoutAmount: 8.5,
-      tipAmount: o.tip || 2.0,
+      distanceKm: 1.8,
+      estimatedMinutes: 16,
+      payoutAmount: 85.0,
+      tipAmount: o.tip || 50.0,
       itemCount: o.items.length,
       countdownSeconds: 30,
     }));
@@ -95,8 +95,8 @@ export class CouriersService {
       nextStatus = OrderStatus.DELIVERED;
       note = 'Order successfully delivered to customer';
       courier.completedDeliveries++;
-      courier.earningsToday += 8.5;
-      courier.tipsToday += order.tip || 2.0;
+      courier.earningsToday += 85.0;
+      courier.tipsToday += order.tip || 50.0;
       courier.activeOrderId = undefined;
     }
 

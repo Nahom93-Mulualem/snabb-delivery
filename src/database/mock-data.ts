@@ -55,6 +55,15 @@ export const INITIAL_USERS: UserEntity[] = [
     createdAt: new Date('2026-01-15'),
   },
   {
+    id: 'usr-restaurant-2',
+    role: UserRole.RESTAURANT,
+    name: 'Habesha Kitchen & Tibs (Merchant)',
+    email: 'owner@habeshakitchen.et',
+    passwordHash: '$2a$10$wE04b...dummy', // mock pass: merchantPass2026!
+    twoFactorSecret: '793421',
+    createdAt: new Date('2026-01-20'),
+  },
+  {
     id: 'usr-admin-1',
     role: UserRole.ADMIN,
     name: 'Super Admin Officer',

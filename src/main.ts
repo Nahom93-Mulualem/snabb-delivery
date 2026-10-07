@@ -1,23 +1,45 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe, Logger } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
+import helmet from 'helmet';
 import { AppModule } from './app.module.js';
 
 async function bootstrap() {
   const logger = new Logger('SnabbBootstrap');
   const app = await NestFactory.create(AppModule);
 
+  // Security Headers via Helmet
+  app.use(
+    helmet({
+      crossOriginResourcePolicy: { policy: 'cross-origin' },
+      contentSecurityPolicy: false, // Allow Swagger docs and rich UI CDN assets
+    }),
+  );
+
   // Global Prefix
   app.setGlobalPrefix('api');
 
-  // CORS Configuration for Next.js and static web clients
+  // Dynamic CORS Configuration from ALLOWED_ORIGINS or development defaults
+  const allowedOrigins = process.env.ALLOWED_ORIGINS
+    ? process.env.ALLOWED_ORIGINS.split(',').map((o) => o.trim())
+    : [
+        'http://localhost:3000',
+        'http://localhost:3456',
+        'http://127.0.0.1:3000',
+        'http://127.0.0.1:3456',
+      ];
+
   app.enableCors({
-    origin: [
-      'http://localhost:3000',
-      'http://localhost:3456',
-      'http://127.0.0.1:3000',
-      'http://127.0.0.1:3456',
-    ],
+    origin: (
+      origin: string | undefined,
+      callback: (err: Error | null, allow?: boolean) => void,
+    ) => {
+      if (!origin || allowedOrigins.includes(origin) || process.env.NODE_ENV !== 'production') {
+        callback(null, true);
+      } else {
+        callback(null, allowedOrigins.includes(origin));
+      }
+    },
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     credentials: true,
   });

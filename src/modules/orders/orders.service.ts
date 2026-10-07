@@ -15,7 +15,7 @@ export class OrdersService {
   ) {}
 
 
-  createOrder(dto: CreateOrderDto, customer: { id: string; name: string; phoneNumber?: string }): OrderEntity {
+  async createOrder(dto: CreateOrderDto, customer: { id: string; name: string; phoneNumber?: string }): Promise<OrderEntity> {
     const restaurant = this.db.getRestaurantById(dto.restaurantId);
     if (!restaurant) {
       throw new NotFoundException(`Restaurant "${dto.restaurantId}" not found`);
@@ -25,16 +25,23 @@ export class OrdersService {
       throw new BadRequestException('Restaurant is currently offline or not accepting orders');
     }
 
-    // Calculate financials
+    // Verify item prices from catalog to prevent price tampering
     let subtotal = 0;
+    const verifiedItems = [];
     for (const item of dto.items) {
-      let itemPrice = item.price * item.quantity;
+      const catalogItem = this.db.getMenuItemById(item.menuItemId);
+      const unitPrice = catalogItem ? catalogItem.price : Math.max(0, item.price);
+      let itemPrice = unitPrice * item.quantity;
       if (item.selectedOptions) {
         for (const opt of item.selectedOptions) {
-          itemPrice += (opt.price || 0) * item.quantity;
+          itemPrice += Math.max(0, opt.price || 0) * item.quantity;
         }
       }
       subtotal += itemPrice;
+      verifiedItems.push({
+        ...item,
+        price: unitPrice,
+      });
     }
 
     let discount = 0;
@@ -50,9 +57,9 @@ export class OrdersService {
       }
     }
 
-    const deliveryFee = restaurant.deliveryFee || 0;
+    const deliveryFee = restaurant.deliveryFee || 65.0; // 65 ETB default delivery
     const tax = Number(((subtotal - discount) * 0.12).toFixed(2)); // 12% standard food tax
-    const tip = dto.tip || 0;
+    const tip = Math.max(0, dto.tip || 0);
     const total = Number((subtotal - discount + deliveryFee + tax + tip).toFixed(2));
 
     const orderNumber = `#SNB-${Math.floor(Math.random() * 8999 + 1000)}`;
@@ -61,11 +68,11 @@ export class OrdersService {
       id: `ord-${Date.now().toString(36)}`,
       orderNumber,
       customerId: customer.id,
-      customerName: customer.name || 'Sofia Lindqvist',
+      customerName: customer.name || 'Addis Diner Customer',
       customerPhone: customer.phoneNumber || '+25163480570',
       restaurantId: restaurant.id,
       restaurantName: restaurant.name,
-      items: dto.items,
+      items: verifiedItems,
       subtotal: Number(subtotal.toFixed(2)),
       deliveryFee,
       tax,
@@ -76,8 +83,8 @@ export class OrdersService {
       prepTimeMinutes: restaurant.prepTimeDefault || 15,
       deliveryAddress: dto.deliveryAddress,
       dropOffNote: dto.dropOffNote,
-      destinationLat: restaurant.lat + 0.008,
-      destinationLng: restaurant.lng + 0.004,
+      destinationLat: restaurant.lat ? restaurant.lat + 0.008 : 8.998,
+      destinationLng: restaurant.lng ? restaurant.lng + 0.004 : 38.788,
       timeline: [
         {
           status: OrderStatus.PENDING,
@@ -85,11 +92,52 @@ export class OrdersService {
           note: 'Order submitted by customer',
         },
       ],
-      paymentMethod: dto.paymentMethod || 'Credit Card',
+      paymentMethod: dto.paymentMethod || 'Telebirr',
       isPaid: true,
       createdAt: new Date(),
       updatedAt: new Date(),
     };
+
+    // Transactional Prisma write to PostgreSQL with graceful in-memory fallback
+    try {
+      if (this.prisma && this.prisma.$transaction) {
+        await this.prisma.$transaction(async (tx) => {
+          const dbCustomer = await tx.user.findFirst({
+            where: {
+              OR: [{ id: customer.id }, { phoneNumber: customer.phoneNumber || '' }],
+            },
+          });
+          const dbRestaurant = await tx.restaurant.findFirst({
+            where: {
+              OR: [{ id: restaurant.id }, { slug: restaurant.slug }],
+            },
+          });
+
+          if (dbCustomer && dbRestaurant) {
+            await tx.order.create({
+              data: {
+                id: newOrder.id,
+                orderNumber: newOrder.orderNumber,
+                userId: dbCustomer.id,
+                restaurantId: dbRestaurant.id,
+                subtotal: newOrder.subtotal,
+                deliveryFee: newOrder.deliveryFee,
+                serviceFee: 25.0,
+                tip: newOrder.tip,
+                total: newOrder.total,
+                deliveryAddress: newOrder.deliveryAddress,
+                dropOffNote: newOrder.dropOffNote,
+                paymentMethod: newOrder.paymentMethod,
+                paymentStatus: 'PAID',
+                status: 'PENDING',
+              },
+            });
+          }
+        });
+      }
+    } catch (err: any) {
+      this.logger.warn(`Prisma PostgreSQL transaction sync: ${err.message}`);
+    }
 
     return this.db.createOrder(newOrder);
   }
@@ -116,8 +164,8 @@ export class OrdersService {
             vehicle: 'E-Bike',
             rating: 4.96,
             currentCoordinates: {
-              lat: order.currentLat || 59.334,
-              lng: order.currentLng || 18.062,
+              lat: order.currentLat || 9.005,
+              lng: order.currentLng || 38.783,
             },
           }
         : null,

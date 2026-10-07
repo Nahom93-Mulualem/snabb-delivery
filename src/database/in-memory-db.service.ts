@@ -43,9 +43,6 @@ export class InMemoryDbService {
   }
 
   verifyOtp(phoneNumber: string, code: string): boolean {
-    // For test convenience, the preset code '482901' always passes
-    if (code === '482901') return true;
-
     const record = this.otpStore.get(phoneNumber);
     if (!record) return false;
     if (Date.now() > record.expiresAt) {
@@ -62,8 +59,8 @@ export class InMemoryDbService {
     return this.users.find((u) => u.id === id);
   }
 
-  findUserByPhone(phone: string, role?: UserRole): UserEntity | undefined {
-    return this.users.find((u) => u.phoneNumber === phone && (!role || u.role === role));
+  findUserByPhone(phone: string, role?: UserRole | string): UserEntity | undefined {
+    return this.users.find((u) => u.phoneNumber === phone && (!role || String(u.role).toUpperCase() === String(role).toUpperCase()));
   }
 
   findUserByEmail(email: string): UserEntity | undefined {
@@ -213,6 +210,22 @@ export class InMemoryDbService {
       });
     }
     return order;
+  }
+
+  markOrderPaid(orderId: string, paymentMethod?: string, transactionRef?: string): OrderEntity | undefined {
+    const order = this.getOrderById(orderId);
+    if (order) {
+      order.isPaid = true;
+      if (paymentMethod) order.paymentMethod = paymentMethod;
+      order.updatedAt = new Date();
+      order.timeline.push({
+        status: order.status,
+        timestamp: new Date(),
+        note: `Payment verified via ${paymentMethod || 'Chapa'} (Ref: ${transactionRef || 'N/A'})`,
+      });
+      return order;
+    }
+    return undefined;
   }
 
   // --- Couriers ---

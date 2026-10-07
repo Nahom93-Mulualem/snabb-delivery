@@ -48,7 +48,7 @@ export class AdminService {
       restaurant: o.restaurantName,
       grossAmount: o.total,
       restaurantPayout: Number((o.subtotal * 0.82).toFixed(2)),
-      courierPayout: 8.5 + (o.tip || 0),
+      courierPayout: 85.0 + (o.tip || 0),
       platformFee: Number((o.total * 0.15).toFixed(2)),
       status: o.status === 'DELIVERED' ? 'SETTLED' : 'HELD_IN_ESCROW',
       timestamp: o.createdAt,

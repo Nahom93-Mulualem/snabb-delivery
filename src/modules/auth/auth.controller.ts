@@ -1,5 +1,6 @@
 import { Controller, Post, Body, Query, HttpCode, HttpStatus } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import { AuthService } from './auth.service.js';
 import { UserRole } from '../../common/enums/user-role.enum.js';
 import { SendOtpDto } from './dto/send-otp.dto.js';
@@ -70,6 +71,7 @@ export class AuthController {
   // 4. Admin: Clearance Key
   @Post('admin/login')
   @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   @ApiOperation({ summary: 'Platform Super-Admin authentication with clearance key' })
   adminLogin(@Body() dto: AdminLoginDto) {
     return this.authService.adminLogin(dto);

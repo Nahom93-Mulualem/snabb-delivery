@@ -10,18 +10,6 @@ export class JwtAuthGuard implements CanActivate {
     const authHeader = request.headers['authorization'];
 
     if (!authHeader) {
-      // For development/demo convenience, if an x-user-role header is provided, mock the user
-      const devRole = request.headers['x-user-role'];
-      if (devRole) {
-        request.user = {
-          id: request.headers['x-user-id'] || 'dev-user-1',
-          role: devRole,
-          name: 'Demo ' + devRole,
-          email: `${devRole}@snabb.io`,
-          phoneNumber: '+25163480570',
-        };
-        return true;
-      }
       throw new UnauthorizedException('Missing Authorization Header');
     }
 
